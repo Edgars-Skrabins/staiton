@@ -25,8 +25,8 @@ public sealed class TerminalRenderControl : Control
             | ControlStyles.ResizeRedraw,
             true);
         DoubleBuffered = true;
-        BackColor = Color.Black;
-        ForeColor = Color.White;
+        BackColor = Color.FromArgb(0x1A, 0x1A, 0x1A);
+        ForeColor = Color.FromArgb(0xD4, 0xD4, 0xD4);
         TabStop = true;
 
         _font = CreateTerminalFont();

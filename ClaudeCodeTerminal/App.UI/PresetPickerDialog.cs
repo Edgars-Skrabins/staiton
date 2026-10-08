@@ -16,12 +16,10 @@ public sealed class PresetPickerDialog : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         MinimizeBox = false;
+        BackColor = Theme.Background;
 
-        _list = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            DisplayMember = nameof(Preset.Name),
-        };
+        _list = new ListBox { Dock = DockStyle.Fill };
+        Theme.StyleListBox(_list);
         foreach (var preset in presets)
             _list.Items.Add(preset);
         if (presets.Count > 0)
@@ -30,6 +28,8 @@ public sealed class PresetPickerDialog : Form
 
         var okButton = new Button { Text = "Start", DialogResult = DialogResult.OK, AutoSize = true };
         var cancelButton = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        Theme.StyleButton(okButton, primary: true);
+        Theme.StyleButton(cancelButton);
         okButton.Click += (_, _) => AcceptSelection();
 
         var buttonPanel = new FlowLayoutPanel
@@ -38,6 +38,7 @@ public sealed class PresetPickerDialog : Form
             FlowDirection = FlowDirection.RightToLeft,
             Height = 44,
             Padding = new Padding(8),
+            BackColor = Theme.Background,
         };
         buttonPanel.Controls.Add(okButton);
         buttonPanel.Controls.Add(cancelButton);

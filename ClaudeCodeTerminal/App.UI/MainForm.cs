@@ -6,9 +6,10 @@ namespace ClaudeCodeTerminal.App.UI;
 public sealed class MainForm : Form
 {
     private readonly TabControl _sessionTabs;
-    private readonly DiffPanelControl _diffPanel;
+    private readonly Panel _emptyStatePanel;
+    private readonly Panel _toolbar;
+    private readonly Button _newSessionButton;
     private readonly ToolStripMenuItem _newSessionMenuItem;
-    private readonly SplitContainer _split;
 
     private ProjectContext? _project;
     private ProjectFileWatcherService? _watcher;
@@ -16,9 +17,10 @@ public sealed class MainForm : Form
     public MainForm()
     {
         Text = "Claude Code Terminal";
-        Width = 1200;
-        Height = 800;
+        Width = 1280;
+        Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
+        BackColor = Theme.Background;
 
         var openProjectMenuItem = new ToolStripMenuItem("Open Project...", null, OnOpenProjectClicked);
         _newSessionMenuItem = new ToolStripMenuItem("New Session", null, OnNewSessionClicked) { Enabled = false };
@@ -33,25 +35,102 @@ public sealed class MainForm : Form
         var menuStrip = new MenuStrip();
         menuStrip.Items.Add(fileMenu);
 
-        _split = new SplitContainer
+        _newSessionButton = new Button
+        {
+            Text = "+  New Session",
+            AutoSize = false,
+            Size = new Size(150, 28),
+            Location = new Point(10, 6),
+        };
+        Theme.StyleButton(_newSessionButton, primary: true);
+        _newSessionButton.Click += OnNewSessionClicked;
+
+        _toolbar = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 40,
+            BackColor = Theme.PanelBackground,
+            Visible = false,
+        };
+        _toolbar.Controls.Add(_newSessionButton);
+
+        _sessionTabs = new TabControl
         {
             Dock = DockStyle.Fill,
-            Orientation = Orientation.Vertical,
+            DrawMode = TabDrawMode.OwnerDrawFixed,
+            ItemSize = new Size(140, 32),
+            Padding = new Point(12, 6),
+            BackColor = Theme.Background,
+            Visible = false,
         };
-
-        _sessionTabs = new TabControl { Dock = DockStyle.Fill };
+        _sessionTabs.DrawItem += OnDrawTabItem;
         _sessionTabs.SelectedIndexChanged += OnActiveTabChanged;
 
-        _diffPanel = new DiffPanelControl { Dock = DockStyle.Fill };
+        _emptyStatePanel = BuildEmptyStatePanel();
 
-        _split.Panel1.Controls.Add(_sessionTabs);
-        _split.Panel2.Controls.Add(_diffPanel);
-
-        Controls.Add(_split);
+        Controls.Add(_sessionTabs);
+        Controls.Add(_toolbar);
+        Controls.Add(_emptyStatePanel);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
+    }
 
-        Shown += (_, _) => _split.SplitterDistance = Math.Max(200, ClientSize.Width - 420);
+    private Panel BuildEmptyStatePanel()
+    {
+        var panel = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
+
+        var openButton = new Button
+        {
+            Text = "Open Project",
+            AutoSize = false,
+            Size = new Size(160, 36),
+            Anchor = AnchorStyles.None,
+        };
+        Theme.StyleButton(openButton, primary: true);
+        openButton.Click += OnOpenProjectClicked;
+
+        var hintLabel = new Label
+        {
+            Text = "Select a folder that's already a git repository to get started.",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Theme.SubtleText,
+            Size = new Size(360, 24),
+            Anchor = AnchorStyles.None,
+        };
+
+        panel.Controls.Add(openButton);
+        panel.Controls.Add(hintLabel);
+
+        panel.Layout += (_, _) =>
+        {
+            openButton.Location = new Point((panel.Width - openButton.Width) / 2, (panel.Height - openButton.Height) / 2);
+            hintLabel.Location = new Point((panel.Width - hintLabel.Width) / 2, openButton.Bottom + 12);
+        };
+
+        return panel;
+    }
+
+    private void OnDrawTabItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || e.Index >= _sessionTabs.TabPages.Count)
+            return;
+
+        var page = _sessionTabs.TabPages[e.Index];
+        var selected = e.Index == _sessionTabs.SelectedIndex;
+
+        using (var backBrush = new SolidBrush(selected ? Theme.ElevatedBackground : Theme.PanelBackground))
+            e.Graphics.FillRectangle(backBrush, e.Bounds);
+
+        if (selected)
+        {
+            using var accentBrush = new SolidBrush(Theme.Accent);
+            e.Graphics.FillRectangle(accentBrush, e.Bounds.X, e.Bounds.Bottom - 2, e.Bounds.Width, 2);
+        }
+
+        using var textBrush = new SolidBrush(selected ? Theme.Text : Theme.SubtleText);
+        var textFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
+        e.Graphics.DrawString(page.Text, _sessionTabs.Font, textBrush, e.Bounds, textFormat);
     }
 
     private void OnOpenProjectClicked(object? sender, EventArgs e)
@@ -79,6 +158,10 @@ public sealed class MainForm : Form
 
         Text = $"Claude Code Terminal - {_project!.RootPath}";
         _newSessionMenuItem.Enabled = true;
+
+        _emptyStatePanel.Visible = false;
+        _toolbar.Visible = true;
+        _sessionTabs.Visible = true;
     }
 
     private void CloseProject()
@@ -116,7 +199,6 @@ public sealed class MainForm : Form
 
         await tabControl.StartAsync(picker.SelectedPreset, _project);
         tabControl.RefreshDiff();
-        RefreshDiffPanelIfActive(page);
     }
 
     private void RemoveTab(TabPage page)
@@ -128,15 +210,10 @@ public sealed class MainForm : Form
     private void OnActiveTabChanged(object? sender, EventArgs e)
     {
         if (!TryGetActiveTab(out var tab))
-        {
-            _diffPanel.ShowChanges([]);
             return;
-        }
 
         if (tab.DiffEngine is { IsStale: true })
             tab.RefreshDiff();
-
-        _diffPanel.ShowChanges(tab.LastChanges);
     }
 
     private void OnProjectFilesChanged(object? sender, EventArgs e)
@@ -155,26 +232,10 @@ public sealed class MainForm : Form
                 continue;
 
             if (page == activePage)
-            {
                 tab.RefreshDiff();
-                _diffPanel.ShowChanges(tab.LastChanges);
-            }
             else
-            {
                 tab.DiffEngine?.MarkStale();
-            }
         }
-    }
-
-    private void RefreshDiffPanelIfActive(TabPage page)
-    {
-        if (_sessionTabs.SelectedTab != page)
-            return;
-
-        if (page.Controls.Count == 0 || page.Controls[0] is not SessionTabControl tab)
-            return;
-
-        _diffPanel.ShowChanges(tab.LastChanges);
     }
 
     private bool TryGetActiveTab(out SessionTabControl tab)

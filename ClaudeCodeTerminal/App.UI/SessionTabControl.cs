@@ -7,7 +7,11 @@ namespace ClaudeCodeTerminal.App.UI;
 
 public sealed class SessionTabControl : UserControl
 {
+    private readonly SplitContainer _outerSplit;
+    private bool _splittersInitialized;
+
     public TerminalRenderControl Terminal { get; }
+    public DiffPanelControl DiffPanel { get; }
     public PtySession? Session { get; private set; }
     public TabDiffEngine? DiffEngine { get; private set; }
     public IReadOnlyList<FileChange> LastChanges { get; private set; } = Array.Empty<FileChange>();
@@ -18,9 +22,36 @@ public sealed class SessionTabControl : UserControl
 
     public SessionTabControl()
     {
+        BackColor = Theme.Background;
+
         Terminal = new TerminalRenderControl { Dock = DockStyle.Fill };
         Terminal.TerminalSizeChanged += OnTerminalSizeChanged;
-        Controls.Add(Terminal);
+
+        DiffPanel = new DiffPanelControl { Dock = DockStyle.Fill };
+
+        _outerSplit = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            SplitterWidth = 1,
+        };
+        Theme.StyleSplitContainer(_outerSplit);
+        _outerSplit.Panel1.Controls.Add(Terminal);
+        _outerSplit.Panel2.Controls.Add(DiffPanel);
+
+        Controls.Add(_outerSplit);
+
+        Layout += OnFirstLayout;
+    }
+
+    private void OnFirstLayout(object? sender, LayoutEventArgs e)
+    {
+        if (_splittersInitialized || Width < 300)
+            return;
+
+        var target = (int)(Width * 0.42);
+        _outerSplit.SplitterDistance = Math.Clamp(target, 100, Math.Max(100, Width - 100));
+        _splittersInitialized = true;
     }
 
     public async Task StartAsync(Preset preset, ProjectContext project)
@@ -46,6 +77,7 @@ public sealed class SessionTabControl : UserControl
             return;
 
         LastChanges = DiffEngine.Recompute();
+        DiffPanel.ShowChanges(LastChanges);
     }
 
     private void OnTerminalSizeChanged(object? sender, (int Rows, int Cols) size)
