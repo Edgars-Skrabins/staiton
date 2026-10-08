@@ -7,6 +7,7 @@ public sealed class DiffPanelControl : UserControl
     private readonly SplitContainer _split;
     private readonly ListBox _fileList;
     private readonly RichTextBox _diffView;
+    private readonly Font _diffFont;
     private IReadOnlyList<FileChange> _changes = [];
     private bool _splitterInitialized;
 
@@ -36,6 +37,7 @@ public sealed class DiffPanelControl : UserControl
         _fileList.DrawItem += OnDrawFileListItem;
         _fileList.SelectedIndexChanged += (_, _) => ShowSelectedDiff();
 
+        _diffFont = CreateDiffFont();
         _diffView = new RichTextBox
         {
             Dock = DockStyle.Fill,
@@ -46,8 +48,9 @@ public sealed class DiffPanelControl : UserControl
             BackColor = Theme.Background,
             ForeColor = Theme.Text,
             DetectUrls = false,
-            Font = CreateDiffFont(),
+            Font = _diffFont,
         };
+        Theme.ApplyDarkScrollBar(_diffView);
 
         _split.Panel1.Controls.Add(_fileList);
         _split.Panel2.Controls.Add(_diffView);
@@ -146,8 +149,6 @@ public sealed class DiffPanelControl : UserControl
         if (string.IsNullOrEmpty(diffText))
             return;
 
-        _diffView.SuspendLayout();
-
         var lines = diffText.Replace("\r\n", "\n").Split('\n');
         for (var i = 0; i < lines.Length; i++)
         {
@@ -165,7 +166,6 @@ public sealed class DiffPanelControl : UserControl
         }
 
         _diffView.Select(0, 0);
-        _diffView.ResumeLayout();
     }
 
     public static (Color Foreground, Color Background) ClassifyDiffLine(string line)
@@ -191,5 +191,13 @@ public sealed class DiffPanelControl : UserControl
             return (Theme.Deleted, Theme.DiffRemovedBackground);
 
         return (Theme.Text, Theme.Background);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+            _diffFont.Dispose();
+
+        base.Dispose(disposing);
     }
 }
