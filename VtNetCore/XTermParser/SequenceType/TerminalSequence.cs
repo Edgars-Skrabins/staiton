@@ -10,6 +10,7 @@
         public bool IsSend { get; set; }
         public bool IsBang { get; set; }
         public bool IsEquals { get; set; }
+        public bool IsLessThan { get; set; }
         public string Command { get; set; }
         public List<TerminalSequence> ProcessFirst { get; set; }
 

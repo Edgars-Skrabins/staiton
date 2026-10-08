@@ -17,6 +17,7 @@
             bool isSend = false;
             bool isBang = false;
             bool isEquals = false;
+            bool isLessThan = false;
             char? modifier = null;
 
             int currentParameter = -1;
@@ -35,6 +36,8 @@
                     isBang = true;
                 else if (atStart && next == '=')
                     isEquals = true;
+                else if (atStart && next == '<')
+                    isLessThan = true;
                 else if (next == ';')
                 {
                     if (currentParameter == -1)
@@ -98,6 +101,7 @@
                         IsSend = isSend,
                         IsBang = isBang,
                         IsEquals = isEquals,
+                        IsLessThan = isLessThan,
                         Command = (modifier.HasValue ? modifier.Value.ToString() : "") + next.ToString(),
                         ProcessFirst = ProcesFirst.Count > 0 ? ProcesFirst : null
                     };
@@ -128,7 +132,38 @@
 
             while (true)
             {
-                var next = stream.Read();
+                var next = stream.Read(utf8: true);
+
+                if (next == 0x1B) // possible 7-bit ST (ESC \)
+                {
+                    var after = stream.Read();
+                    if (after == '\\')
+                    {
+                        if (currentParameter != -1)
+                        {
+                            Parameters.Add(currentParameter);
+                        }
+                        var osc = new OscSequence
+                        {
+                            Parameters = Parameters,
+                            IsQuery = isQuery,
+                            IsSend = isSend,
+                            IsBang = isBang,
+                            Command = command
+                        };
+
+                        stream.Commit();
+
+                        //System.Diagnostics.Debug.WriteLine(osc.ToString());
+
+                        return osc;
+                    }
+
+                    command += next;
+                    command += after;
+                    readingCommand = true;
+                    continue;
+                }
 
                 if (readingCommand || next == 0x07 || next == 0x9C) // BEL or ST
                 {
