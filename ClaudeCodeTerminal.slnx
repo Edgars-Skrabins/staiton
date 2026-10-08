@@ -1,4 +1,5 @@
 <Solution>
+  <Project Path="ClaudeCodeTerminal.Tests/ClaudeCodeTerminal.Tests.csproj" />
   <Project Path="ClaudeCodeTerminal/ClaudeCodeTerminal.csproj" />
   <Project Path="VtNetCore/VtNetCore.csproj" />
 </Solution>
