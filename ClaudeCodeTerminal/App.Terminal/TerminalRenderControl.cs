@@ -23,7 +23,8 @@ public sealed class TerminalRenderControl : Control
             ControlStyles.AllPaintingInWmPaint
             | ControlStyles.UserPaint
             | ControlStyles.OptimizedDoubleBuffer
-            | ControlStyles.ResizeRedraw,
+            | ControlStyles.ResizeRedraw
+            | ControlStyles.Selectable,
             true);
         DoubleBuffered = true;
         BackColor = Color.FromArgb(0x1A, 0x1A, 0x1A);
@@ -218,6 +219,13 @@ public sealed class TerminalRenderControl : Control
 
         _grid.KeyPressed(e.KeyChar.ToString(), control: false, shift: false);
         e.Handled = true;
+    }
+
+    protected override void OnMouseDown(MouseEventArgs e)
+    {
+        base.OnMouseDown(e);
+        if (!Focused)
+            Focus();
     }
 
     private static string? MapKeyCode(Keys keyCode, bool controlPressed)
