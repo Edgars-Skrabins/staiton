@@ -151,8 +151,8 @@
             // | Z      | z      | Z      | \x1a     |
             { "Back",    new KeyboardTranslation { Normal = "\u007F", Shift = "\b", Control = "\u007F" } },
             { "Tab",     new KeyboardTranslation { Normal = "\t", Shift = "\u001b[Z" } },
-            { "Enter",   new KeyboardTranslation { Normal = "\n", Shift = "\n", Control = "\n" } },
-            { "Return",  new KeyboardTranslation { Normal = "\n", Shift = "\n", Control = "\n" } },
+            { "Enter",   new KeyboardTranslation { Normal = "\r", Shift = "\r", Control = "\r" } },
+            { "Return",  new KeyboardTranslation { Normal = "\r", Shift = "\r", Control = "\r" } },
             { "Escape",  new KeyboardTranslation { Normal = "\u001b\u001b", Shift = "\u001b\u001b", Control = "\u001b\u001b" } },
             { "A",       new KeyboardTranslation { Control = "\u0001" } },
             { "B",       new KeyboardTranslation { Control = "\u0002" } },
