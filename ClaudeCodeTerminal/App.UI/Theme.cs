@@ -7,7 +7,15 @@ public static class Theme
     [DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int valueSize);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint flags);
+
     private const int DwmwaUseImmersiveDarkMode = 20;
+    private const uint SwpFrameChanged = 0x0020;
+    private const uint SwpNoMove = 0x0002;
+    private const uint SwpNoSize = 0x0001;
+    private const uint SwpNoZOrder = 0x0004;
+    private const uint SwpNoActivate = 0x0010;
 
     public static void ApplyDarkTitleBar(Form form)
     {
@@ -15,12 +23,28 @@ public static class Theme
         {
             var useDark = 1;
             DwmSetWindowAttribute(form.Handle, DwmwaUseImmersiveDarkMode, ref useDark, sizeof(int));
+            SetWindowPos(form.Handle, IntPtr.Zero, 0, 0, 0, 0, SwpFrameChanged | SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate);
         }
 
         if (form.IsHandleCreated)
             Apply();
         else
             form.HandleCreated += (_, _) => Apply();
+
+        form.Shown += (_, _) => Apply();
+    }
+
+    [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
+    private static extern int SetWindowTheme(IntPtr hWnd, string pszSubAppName, string? pszSubIdList);
+
+    public static void ApplyDarkScrollBar(Control control)
+    {
+        void Apply() => SetWindowTheme(control.Handle, "DarkMode_Explorer", null);
+
+        if (control.IsHandleCreated)
+            Apply();
+        else
+            control.HandleCreated += (_, _) => Apply();
     }
 
     public static readonly Color Background = Color.FromArgb(0x16, 0x17, 0x19);
