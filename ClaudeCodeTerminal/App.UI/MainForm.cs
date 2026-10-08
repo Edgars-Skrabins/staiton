@@ -1,3 +1,4 @@
+using System.Drawing.Drawing2D;
 using ClaudeCodeTerminal.App.Core;
 using ClaudeCodeTerminal.App.Diff;
 
@@ -137,7 +138,7 @@ public sealed class MainForm : Form
         var page = _sessionTabs.TabPages[e.Index];
         var selected = e.Index == _sessionTabs.SelectedIndex;
 
-        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
 
         using (var backBrush = new SolidBrush(selected ? Theme.ElevatedBackground : Theme.PanelBackground))
             e.Graphics.FillRectangle(backBrush, e.Bounds);
