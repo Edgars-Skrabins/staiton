@@ -6,7 +6,7 @@ public sealed class DiffPanelControl : UserControl
 {
     private readonly SplitContainer _split;
     private readonly ListBox _fileList;
-    private readonly TextBox _diffView;
+    private readonly RichTextBox _diffView;
     private IReadOnlyList<FileChange> _changes = [];
     private bool _splitterInitialized;
 
@@ -27,31 +27,43 @@ public sealed class DiffPanelControl : UserControl
         {
             Dock = DockStyle.Fill,
             DrawMode = DrawMode.OwnerDrawFixed,
-            ItemHeight = 22,
+            ItemHeight = 24,
             BackColor = Theme.PanelBackground,
             ForeColor = Theme.Text,
             BorderStyle = BorderStyle.None,
+            Font = Theme.UiFont,
         };
         _fileList.DrawItem += OnDrawFileListItem;
         _fileList.SelectedIndexChanged += (_, _) => ShowSelectedDiff();
 
-        _diffView = new TextBox
+        _diffView = new RichTextBox
         {
             Dock = DockStyle.Fill,
-            Multiline = true,
             ReadOnly = true,
-            ScrollBars = ScrollBars.Both,
             WordWrap = false,
+            ScrollBars = RichTextBoxScrollBars.Both,
             BorderStyle = BorderStyle.None,
             BackColor = Theme.Background,
             ForeColor = Theme.Text,
-            Font = new Font(FontFamily.GenericMonospace, 9f),
+            DetectUrls = false,
+            Font = CreateDiffFont(),
         };
 
         _split.Panel1.Controls.Add(_fileList);
         _split.Panel2.Controls.Add(_diffView);
 
         Controls.Add(_split);
+    }
+
+    private static Font CreateDiffFont()
+    {
+        foreach (var family in new[] { "Cascadia Mono", "Consolas" })
+        {
+            if (FontFamily.Families.Any(f => f.Name.Equals(family, StringComparison.OrdinalIgnoreCase)))
+                return new Font(family, 9f, FontStyle.Regular, GraphicsUnit.Point);
+        }
+
+        return new Font(FontFamily.GenericMonospace, 9f, FontStyle.Regular, GraphicsUnit.Point);
     }
 
     private void OnFirstLayout(object? sender, LayoutEventArgs e)
@@ -76,7 +88,7 @@ public sealed class DiffPanelControl : UserControl
         if (_fileList.Items.Count > 0)
             _fileList.SelectedIndex = 0;
         else
-            _diffView.Text = string.Empty;
+            _diffView.Clear();
     }
 
     private void OnDrawFileListItem(object? sender, DrawItemEventArgs e)
@@ -113,19 +125,71 @@ public sealed class DiffPanelControl : UserControl
         };
 
         using var markerBrush = new SolidBrush(markerColor);
-        var markerBounds = new Rectangle(e.Bounds.X + 8, e.Bounds.Y, 16, e.Bounds.Height);
+        var markerBounds = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, 16, e.Bounds.Height);
         e.Graphics.DrawString(marker, e.Font ?? Font, markerBrush, markerBounds, new StringFormat { LineAlignment = StringAlignment.Center });
 
         using var textBrush = new SolidBrush(Theme.Text);
-        var textBounds = new Rectangle(e.Bounds.X + 24, e.Bounds.Y, e.Bounds.Width - 24, e.Bounds.Height);
+        var textBounds = new Rectangle(e.Bounds.X + 26, e.Bounds.Y, e.Bounds.Width - 26, e.Bounds.Height);
         e.Graphics.DrawString(change.Path, e.Font ?? Font, textBrush, textBounds, new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisPath });
     }
 
     private void ShowSelectedDiff()
     {
         var index = _fileList.SelectedIndex;
-        _diffView.Text = index >= 0 && index < _changes.Count
-            ? _changes[index].DiffText
-            : string.Empty;
+        var diffText = index >= 0 && index < _changes.Count ? _changes[index].DiffText : string.Empty;
+        RenderDiff(diffText);
+    }
+
+    private void RenderDiff(string diffText)
+    {
+        _diffView.Clear();
+        if (string.IsNullOrEmpty(diffText))
+            return;
+
+        _diffView.SuspendLayout();
+
+        var lines = diffText.Replace("\r\n", "\n").Split('\n');
+        for (var i = 0; i < lines.Length; i++)
+        {
+            var line = lines[i];
+            var isLast = i == lines.Length - 1;
+            if (isLast && line.Length == 0)
+                break;
+
+            var (fg, bg) = ClassifyDiffLine(line);
+            var start = _diffView.TextLength;
+            _diffView.AppendText(line + "\n");
+            _diffView.Select(start, line.Length + 1);
+            _diffView.SelectionColor = fg;
+            _diffView.SelectionBackColor = bg;
+        }
+
+        _diffView.Select(0, 0);
+        _diffView.ResumeLayout();
+    }
+
+    public static (Color Foreground, Color Background) ClassifyDiffLine(string line)
+    {
+        if (line.StartsWith("diff --git", StringComparison.Ordinal)
+            || line.StartsWith("index ", StringComparison.Ordinal)
+            || line.StartsWith("new file mode", StringComparison.Ordinal)
+            || line.StartsWith("deleted file mode", StringComparison.Ordinal)
+            || line.StartsWith("similarity index", StringComparison.Ordinal)
+            || line.StartsWith("rename from", StringComparison.Ordinal)
+            || line.StartsWith("rename to", StringComparison.Ordinal)
+            || line.StartsWith("--- ", StringComparison.Ordinal)
+            || line.StartsWith("+++ ", StringComparison.Ordinal))
+            return (Theme.FaintText, Theme.Background);
+
+        if (line.StartsWith("@@", StringComparison.Ordinal))
+            return (Theme.DiffHunkHeader, Theme.DiffHunkBackground);
+
+        if (line.StartsWith("+", StringComparison.Ordinal))
+            return (Theme.Added, Theme.DiffAddedBackground);
+
+        if (line.StartsWith("-", StringComparison.Ordinal))
+            return (Theme.Deleted, Theme.DiffRemovedBackground);
+
+        return (Theme.Text, Theme.Background);
     }
 }
