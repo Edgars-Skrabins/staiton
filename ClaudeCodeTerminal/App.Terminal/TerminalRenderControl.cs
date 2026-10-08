@@ -145,9 +145,15 @@ public sealed class TerminalRenderControl : Control
                     if (span.Italic) style |= FontStyle.Italic;
                     if (span.Underline) style |= FontStyle.Underline;
 
-                    using var font = style == FontStyle.Regular ? _font : new Font(_font, style);
+                    var font = _font;
+                    if (style != FontStyle.Regular)
+                        font = new Font(_font, style);
+
                     using var fgBrush = new SolidBrush(fg);
                     g.DrawString(span.Text, font, fgBrush, x, y, StringFormat.GenericTypographic);
+
+                    if (font != _font)
+                        font.Dispose();
                 }
 
                 x += width;
