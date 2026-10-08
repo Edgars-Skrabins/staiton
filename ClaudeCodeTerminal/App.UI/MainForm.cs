@@ -8,7 +8,7 @@ public sealed class MainForm : Form
     private readonly TabControl _sessionTabs;
     private readonly Panel _emptyStatePanel;
     private readonly Panel _toolbar;
-    private readonly Button _newSessionButton;
+    private readonly ModernButton _newSessionButton;
     private readonly ToolStripMenuItem _newSessionMenuItem;
 
     private ProjectContext? _project;
@@ -21,6 +21,7 @@ public sealed class MainForm : Form
         Height = 820;
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = Theme.Background;
+        Theme.ApplyDarkTitleBar(this);
 
         var openProjectMenuItem = new ToolStripMenuItem("Open Project...", null, OnOpenProjectClicked);
         _newSessionMenuItem = new ToolStripMenuItem("New Session", null, OnNewSessionClicked) { Enabled = false };
@@ -34,13 +35,14 @@ public sealed class MainForm : Form
 
         var menuStrip = new MenuStrip();
         menuStrip.Items.Add(fileMenu);
+        Theme.StyleMenuStrip(menuStrip);
 
-        _newSessionButton = new Button
+        _newSessionButton = new ModernButton
         {
             Text = "+  New Session",
             AutoSize = false,
-            Size = new Size(150, 28),
-            Location = new Point(10, 6),
+            Size = new Size(150, 30),
+            Location = new Point(14, 9),
         };
         Theme.StyleButton(_newSessionButton, primary: true);
         _newSessionButton.Click += OnNewSessionClicked;
@@ -48,7 +50,7 @@ public sealed class MainForm : Form
         _toolbar = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 40,
+            Height = 48,
             BackColor = Theme.PanelBackground,
             Visible = false,
         };
@@ -58,9 +60,10 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             DrawMode = TabDrawMode.OwnerDrawFixed,
-            ItemSize = new Size(140, 32),
-            Padding = new Point(12, 6),
+            ItemSize = new Size(150, 36),
+            Padding = new Point(16, 8),
             BackColor = Theme.Background,
+            Font = Theme.UiFont,
             Visible = false,
         };
         _sessionTabs.DrawItem += OnDrawTabItem;
@@ -79,11 +82,23 @@ public sealed class MainForm : Form
     {
         var panel = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Background };
 
-        var openButton = new Button
+        var titleLabel = new Label
+        {
+            Text = "Claude Code Terminal",
+            AutoSize = false,
+            TextAlign = ContentAlignment.MiddleCenter,
+            ForeColor = Theme.Text,
+            Font = new Font(Theme.UiFont.FontFamily, 18f, FontStyle.Bold),
+            Size = new Size(420, 40),
+            Anchor = AnchorStyles.None,
+        };
+
+        var openButton = new ModernButton
         {
             Text = "Open Project",
             AutoSize = false,
-            Size = new Size(160, 36),
+            Size = new Size(170, 38),
+            Font = Theme.UiFont,
             Anchor = AnchorStyles.None,
         };
         Theme.StyleButton(openButton, primary: true);
@@ -95,17 +110,20 @@ public sealed class MainForm : Form
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleCenter,
             ForeColor = Theme.SubtleText,
-            Size = new Size(360, 24),
+            Font = Theme.UiFont,
+            Size = new Size(380, 24),
             Anchor = AnchorStyles.None,
         };
 
+        panel.Controls.Add(titleLabel);
         panel.Controls.Add(openButton);
         panel.Controls.Add(hintLabel);
 
         panel.Layout += (_, _) =>
         {
+            titleLabel.Location = new Point((panel.Width - titleLabel.Width) / 2, (panel.Height - openButton.Height) / 2 - 56);
             openButton.Location = new Point((panel.Width - openButton.Width) / 2, (panel.Height - openButton.Height) / 2);
-            hintLabel.Location = new Point((panel.Width - hintLabel.Width) / 2, openButton.Bottom + 12);
+            hintLabel.Location = new Point((panel.Width - hintLabel.Width) / 2, openButton.Bottom + 14);
         };
 
         return panel;
@@ -119,18 +137,23 @@ public sealed class MainForm : Form
         var page = _sessionTabs.TabPages[e.Index];
         var selected = e.Index == _sessionTabs.SelectedIndex;
 
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
         using (var backBrush = new SolidBrush(selected ? Theme.ElevatedBackground : Theme.PanelBackground))
             e.Graphics.FillRectangle(backBrush, e.Bounds);
 
         if (selected)
         {
+            const int indicatorWidth = 28;
             using var accentBrush = new SolidBrush(Theme.Accent);
-            e.Graphics.FillRectangle(accentBrush, e.Bounds.X, e.Bounds.Bottom - 2, e.Bounds.Width, 2);
+            var indicatorRect = new Rectangle(e.Bounds.X + (e.Bounds.Width - indicatorWidth) / 2, e.Bounds.Top + 2, indicatorWidth, 3);
+            e.Graphics.FillRectangle(accentBrush, indicatorRect);
         }
 
         using var textBrush = new SolidBrush(selected ? Theme.Text : Theme.SubtleText);
         var textFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        e.Graphics.DrawString(page.Text, _sessionTabs.Font, textBrush, e.Bounds, textFormat);
+        var textBounds = new Rectangle(e.Bounds.X, e.Bounds.Y + 3, e.Bounds.Width, e.Bounds.Height - 3);
+        e.Graphics.DrawString(page.Text, _sessionTabs.Font, textBrush, textBounds, textFormat);
     }
 
     private void OnOpenProjectClicked(object? sender, EventArgs e)
