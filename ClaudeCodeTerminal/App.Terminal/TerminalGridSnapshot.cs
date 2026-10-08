@@ -51,7 +51,7 @@ public sealed class TerminalGridSnapshot
                 return false;
             }
 
-            rows = _controller.GetPageSpans(0, _controller.VisibleRows);
+            rows = _controller.GetPageSpans(_controller.ViewPort.TopRow, _controller.VisibleRows);
             cursor = _controller.CursorState.Clone();
             _controller.ClearChanges();
             return true;
