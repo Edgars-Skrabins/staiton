@@ -34,6 +34,7 @@ public sealed class SessionTabControl : UserControl
         _grid.SendData += (_, data) => Session.Write(data);
         Session.DataReceived += (_, data) => _grid.Feed(data.Span);
         Session.ProcessExited += OnProcessExited;
+        Session.BeginReading();
 
         DiffEngine = new TabDiffEngine(project);
         DiffEngine.BuildBaseline();

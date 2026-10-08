@@ -6,11 +6,40 @@ public sealed class PtySession : IDisposable
 {
     private readonly IPtyConnection _connection;
     private readonly object _writeGate = new();
+    private readonly object _exitGate = new();
     private readonly CancellationTokenSource _readLoopCts = new();
     private Task? _readLoopTask;
     private bool _disposed;
+    private bool _readingStarted;
+    private int? _exitCode;
+    private EventHandler<int>? _processExited;
 
-    public event EventHandler<int>? ProcessExited;
+    public event EventHandler<int>? ProcessExited
+    {
+        add
+        {
+            bool alreadyExited;
+            int code;
+            lock (_exitGate)
+            {
+                alreadyExited = _exitCode.HasValue;
+                code = _exitCode ?? 0;
+                if (!alreadyExited)
+                    _processExited += value;
+            }
+
+            if (alreadyExited)
+                value?.Invoke(this, code);
+        }
+        remove
+        {
+            lock (_exitGate)
+            {
+                _processExited -= value;
+            }
+        }
+    }
+
     public event EventHandler<ReadOnlyMemory<byte>>? DataReceived;
 
     private PtySession(IPtyConnection connection)
@@ -38,9 +67,16 @@ public sealed class PtySession : IDisposable
         };
 
         var connection = await PtyProvider.SpawnAsync(options, cancellationToken).ConfigureAwait(false);
-        var session = new PtySession(connection);
-        session.StartReadLoop();
-        return session;
+        return new PtySession(connection);
+    }
+
+    public void BeginReading()
+    {
+        if (_readingStarted)
+            return;
+        _readingStarted = true;
+
+        StartReadLoop();
     }
 
     private void StartReadLoop()
@@ -76,7 +112,15 @@ public sealed class PtySession : IDisposable
 
     private void OnProcessExited(object? sender, PtyExitedEventArgs e)
     {
-        ProcessExited?.Invoke(this, e.ExitCode);
+        EventHandler<int>? handlers;
+        lock (_exitGate)
+        {
+            _exitCode = e.ExitCode;
+            handlers = _processExited;
+            _processExited = null;
+        }
+
+        handlers?.Invoke(this, e.ExitCode);
     }
 
     public void Resize(int rows, int cols)
