@@ -199,6 +199,7 @@ public sealed class MainForm : Form
 
         await tabControl.StartAsync(picker.SelectedPreset, _project);
         tabControl.RefreshDiff();
+        tabControl.Terminal.Focus();
     }
 
     private void RemoveTab(TabPage page)
@@ -214,6 +215,8 @@ public sealed class MainForm : Form
 
         if (tab.DiffEngine is { IsStale: true })
             tab.RefreshDiff();
+
+        tab.Terminal.Focus();
     }
 
     private void OnProjectFilesChanged(object? sender, EventArgs e)
