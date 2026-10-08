@@ -11,6 +11,7 @@ public sealed class TerminalRenderControl : Control
     private Font _font;
     private SizeF _cellSize;
     private readonly System.Windows.Forms.Timer _repaintTimer;
+    private readonly System.Windows.Forms.Timer _resizeDebounceTimer;
     private IReadOnlyList<LayoutRow> _lastRows = Array.Empty<LayoutRow>();
     private TerminalCursorState? _lastCursor;
 
@@ -35,6 +36,13 @@ public sealed class TerminalRenderControl : Control
         _repaintTimer = new System.Windows.Forms.Timer { Interval = 33 };
         _repaintTimer.Tick += (_, _) => RepaintIfChanged();
         _repaintTimer.Start();
+
+        _resizeDebounceTimer = new System.Windows.Forms.Timer { Interval = 120 };
+        _resizeDebounceTimer.Tick += (_, _) =>
+        {
+            _resizeDebounceTimer.Stop();
+            RecalculateGridSize();
+        };
     }
 
     public (int Rows, int Cols) CurrentGridSize
@@ -77,7 +85,8 @@ public sealed class TerminalRenderControl : Control
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        RecalculateGridSize();
+        _resizeDebounceTimer.Stop();
+        _resizeDebounceTimer.Start();
     }
 
     protected override void OnDpiChangedAfterParent(EventArgs e)
@@ -241,6 +250,8 @@ public sealed class TerminalRenderControl : Control
         {
             _repaintTimer.Stop();
             _repaintTimer.Dispose();
+            _resizeDebounceTimer.Stop();
+            _resizeDebounceTimer.Dispose();
             _font.Dispose();
         }
 
