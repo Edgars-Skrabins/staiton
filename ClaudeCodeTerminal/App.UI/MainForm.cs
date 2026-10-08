@@ -1,4 +1,3 @@
-using System.Drawing.Drawing2D;
 using ClaudeCodeTerminal.App.Core;
 using ClaudeCodeTerminal.App.Diff;
 
@@ -6,14 +5,15 @@ namespace ClaudeCodeTerminal.App.UI;
 
 public sealed class MainForm : Form
 {
-    private readonly TabControl _sessionTabs;
+    private readonly TabStrip _tabStrip;
+    private readonly Panel _tabContentHost;
     private readonly Panel _emptyStatePanel;
-    private readonly Panel _toolbar;
-    private readonly ModernButton _newSessionButton;
     private readonly ToolStripMenuItem _newSessionMenuItem;
+    private readonly Dictionary<TabStripItem, SessionTabControl> _sessions = [];
 
     private ProjectContext? _project;
     private ProjectFileWatcherService? _watcher;
+    private int _sessionCounter;
 
     public MainForm()
     {
@@ -38,42 +38,22 @@ public sealed class MainForm : Form
         menuStrip.Items.Add(fileMenu);
         Theme.StyleMenuStrip(menuStrip);
 
-        _newSessionButton = new ModernButton
-        {
-            Text = "+  New Session",
-            AutoSize = false,
-            Size = new Size(150, 30),
-            Location = new Point(14, 9),
-        };
-        Theme.StyleButton(_newSessionButton, primary: true);
-        _newSessionButton.Click += OnNewSessionClicked;
+        _tabStrip = new TabStrip { Visible = false };
+        _tabStrip.AddTabRequested += OnNewSessionClicked;
+        _tabStrip.TabActivated += OnTabActivated;
+        _tabStrip.TabCloseRequested += (_, item) => CloseSession(item);
 
-        _toolbar = new Panel
-        {
-            Dock = DockStyle.Top,
-            Height = 48,
-            BackColor = Theme.PanelBackground,
-            Visible = false,
-        };
-        _toolbar.Controls.Add(_newSessionButton);
-
-        _sessionTabs = new TabControl
+        _tabContentHost = new Panel
         {
             Dock = DockStyle.Fill,
-            DrawMode = TabDrawMode.OwnerDrawFixed,
-            ItemSize = new Size(150, 36),
-            Padding = new Point(16, 8),
             BackColor = Theme.Background,
-            Font = Theme.UiFont,
             Visible = false,
         };
-        _sessionTabs.DrawItem += OnDrawTabItem;
-        _sessionTabs.SelectedIndexChanged += OnActiveTabChanged;
 
         _emptyStatePanel = BuildEmptyStatePanel();
 
-        Controls.Add(_sessionTabs);
-        Controls.Add(_toolbar);
+        Controls.Add(_tabContentHost);
+        Controls.Add(_tabStrip);
         Controls.Add(_emptyStatePanel);
         Controls.Add(menuStrip);
         MainMenuStrip = menuStrip;
@@ -130,33 +110,6 @@ public sealed class MainForm : Form
         return panel;
     }
 
-    private void OnDrawTabItem(object? sender, DrawItemEventArgs e)
-    {
-        if (e.Index < 0 || e.Index >= _sessionTabs.TabPages.Count)
-            return;
-
-        var page = _sessionTabs.TabPages[e.Index];
-        var selected = e.Index == _sessionTabs.SelectedIndex;
-
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-
-        using (var backBrush = new SolidBrush(selected ? Theme.ElevatedBackground : Theme.PanelBackground))
-            e.Graphics.FillRectangle(backBrush, e.Bounds);
-
-        if (selected)
-        {
-            const int indicatorWidth = 28;
-            using var accentBrush = new SolidBrush(Theme.Accent);
-            var indicatorRect = new Rectangle(e.Bounds.X + (e.Bounds.Width - indicatorWidth) / 2, e.Bounds.Top + 2, indicatorWidth, 3);
-            e.Graphics.FillRectangle(accentBrush, indicatorRect);
-        }
-
-        using var textBrush = new SolidBrush(selected ? Theme.Text : Theme.SubtleText);
-        var textFormat = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        var textBounds = new Rectangle(e.Bounds.X, e.Bounds.Y + 3, e.Bounds.Width, e.Bounds.Height - 3);
-        e.Graphics.DrawString(page.Text, _sessionTabs.Font, textBrush, textBounds, textFormat);
-    }
-
     private void OnOpenProjectClicked(object? sender, EventArgs e)
     {
         using var dialog = new FolderBrowserDialog
@@ -184,8 +137,8 @@ public sealed class MainForm : Form
         _newSessionMenuItem.Enabled = true;
 
         _emptyStatePanel.Visible = false;
-        _toolbar.Visible = true;
-        _sessionTabs.Visible = true;
+        _tabStrip.Visible = true;
+        _tabContentHost.Visible = true;
     }
 
     private void CloseProject()
@@ -193,12 +146,10 @@ public sealed class MainForm : Form
         _watcher?.Dispose();
         _watcher = null;
 
-        foreach (var page in _sessionTabs.TabPages.Cast<TabPage>().ToArray())
-        {
-            _sessionTabs.TabPages.Remove(page);
-            page.Dispose();
-        }
+        foreach (var item in _tabStrip.Items.ToArray())
+            CloseSession(item);
 
+        _sessionCounter = 0;
         _project = null;
         _newSessionMenuItem.Enabled = false;
     }
@@ -212,29 +163,37 @@ public sealed class MainForm : Form
         if (picker.ShowDialog(this) != DialogResult.OK || picker.SelectedPreset is null)
             return;
 
-        var tabControl = new SessionTabControl { Dock = DockStyle.Fill };
-        var page = new TabPage(picker.SelectedPreset.Name);
-        page.Controls.Add(tabControl);
+        _sessionCounter++;
+        var tabControl = new SessionTabControl { Dock = DockStyle.Fill, Visible = false };
+        _tabContentHost.Controls.Add(tabControl);
 
-        tabControl.SessionExited += (_, _) => RemoveTab(page);
+        var item = _tabStrip.AddTab($"Session {_sessionCounter}");
+        _sessions[item] = tabControl;
+        tabControl.SessionExited += (_, _) => CloseSession(item);
 
-        _sessionTabs.TabPages.Add(page);
-        _sessionTabs.SelectedTab = page;
+        _tabStrip.Activate(item);
 
         await tabControl.StartAsync(picker.SelectedPreset, _project);
         tabControl.RefreshDiff();
         tabControl.Terminal.Focus();
     }
 
-    private void RemoveTab(TabPage page)
+    private void CloseSession(TabStripItem item)
     {
-        _sessionTabs.TabPages.Remove(page);
-        page.Dispose();
+        if (!_sessions.Remove(item, out var tabControl))
+            return;
+
+        _tabStrip.RemoveTab(item);
+        _tabContentHost.Controls.Remove(tabControl);
+        tabControl.Dispose();
     }
 
-    private void OnActiveTabChanged(object? sender, EventArgs e)
+    private void OnTabActivated(object? sender, TabStripItem item)
     {
-        if (!TryGetActiveTab(out var tab))
+        foreach (var (otherItem, otherTab) in _sessions)
+            otherTab.Visible = otherItem == item;
+
+        if (!_sessions.TryGetValue(item, out var tab))
             return;
 
         if (tab.DiffEngine is { IsStale: true })
@@ -251,31 +210,13 @@ public sealed class MainForm : Form
             return;
         }
 
-        var activePage = _sessionTabs.SelectedTab;
-
-        foreach (TabPage page in _sessionTabs.TabPages)
+        foreach (var tab in _sessions.Values)
         {
-            if (page.Controls.Count == 0 || page.Controls[0] is not SessionTabControl tab)
-                continue;
-
-            if (page == activePage)
+            if (tab.Visible)
                 tab.RefreshDiff();
             else
                 tab.DiffEngine?.MarkStale();
         }
-    }
-
-    private bool TryGetActiveTab(out SessionTabControl tab)
-    {
-        var page = _sessionTabs.SelectedTab;
-        if (page is not null && page.Controls.Count > 0 && page.Controls[0] is SessionTabControl found)
-        {
-            tab = found;
-            return true;
-        }
-
-        tab = null!;
-        return false;
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)
