@@ -197,9 +197,9 @@ Ref: `SPEC.md` § "Diff-Baseline Mechanism", § "FileSystemWatcher Design".
 
 ---
 
-## Milestone 4 — Usage Tab
+## Milestone 4 — Usage Tab — DEFERRED (explicitly deprioritized by user, low value for now)
 
-Ref: `SPEC.md` § "Usage Tab".
+Ref: `SPEC.md` § "Usage Tab". Nothing below has been built; left in place as the design if/when this gets picked back up.
 
 ### 4.1 `App.Usage.TranscriptLogReader`
 - [ ] Compute `sanitized-cwd` from the project root path (replace path separators with `-`; confirm the exact replacement rule against more than one real example path on this machine, including a path with a space in it, before assuming the simple separator-swap is the complete rule).
@@ -230,54 +230,37 @@ Ref: `SPEC.md` § "Usage Tab".
 
 ---
 
-## Milestone 5 — Notes / Spec Panel
+## Milestone 5 — Repository Maintenance — DEFERRED (explicitly deprioritized by user, low priority for now)
 
-Ref: `SPEC.md` § "Notes / Spec Panel".
+Ref: `SPEC.md` § "Repository Maintenance (git gc)". Nothing below has been built; left in place as the design if/when this gets picked back up. (The dangling baseline objects this exists to clean up are still being created by `BaselineBuilder` either way — see `SPEC.md`'s "accept it as negligible for v1" framing, which is effectively now the operative choice until this milestone is revisited.)
 
-### 5.1 `App.Core.NotesStore`
-- [ ] Enumerate `.sain/notes/*.md` on demand via `Directory.EnumerateFiles` (no separate index file, per spec).
-- [ ] Read/write/create/rename/delete operations, all operating directly on the filesystem (no caching layer needed at this scale).
-- [ ] Decide and document a rule for new-note naming/collision (e.g. prompt for a filename, reject/auto-suffix on collision with an existing file) — spec doesn't pin this down beyond "arbitrary user-named files," so pick the simplest reasonable behavior and note the choice here rather than leaving it to be improvised mid-implementation.
-
-### 5.2 `App.UI.NotesPanelControl`
-- [ ] File list (left side or top) bound to `NotesStore`'s enumeration, refreshed on create/rename/delete.
-- [ ] A simple markdown text editor (plain multi-line text box is acceptable for v1 — spec doesn't call for live markdown preview/rendering; don't add it unless asked).
-- [ ] Save-on-edit behavior: decide explicitly between autosave-on-text-change (debounced) vs. explicit save action, and implement one consistently.
-- [ ] Confirm this panel's placement relative to the Usage tab decided in 2.4 (persistent side panel vs. its own tab) is wired into `MainForm` consistently.
-
----
-
-## Milestone 6 — Repository Maintenance
-
-Ref: `SPEC.md` § "Repository Maintenance (git gc)".
-
-### 6.1 `App.Core.SettingsStore`
+### 5.1 `App.Core.SettingsStore`
 - [ ] Load/save `.sain/settings.json` with the documented shape (`version`, `gcIntervalMinutes`, default `60`).
 - [ ] Same corrupt-file handling pattern as `PresetStore` (2.3): back up and recreate defaults rather than crash on a bad file.
 - [ ] Designed to hold future settings beyond `gcIntervalMinutes` without a schema rewrite (e.g. a flat dictionary-like model, or just add fields as needed later — don't over-engineer an extensibility mechanism for settings that don't exist yet).
 
-### 6.2 `App.Diff.GcScheduler`
+### 5.2 `App.Diff.GcScheduler`
 - [ ] Timer driven by `SettingsStore`'s current `gcIntervalMinutes` (support changing the interval at runtime from `SettingsDialog` without restarting the app — re-arm the timer on a settings change).
 - [ ] In-flight gate: a simple shared flag/semaphore that `BaselineBuilder`/`TabDiffEngine` operations set while running; `GcScheduler` checks it immediately before firing `git gc --auto` and skips the tick (waiting for the next one) if any tab's git operation is in progress.
 - [ ] Shell out to `git gc --auto` as a `Process` run with the project root as working directory; capture stderr/exit code for diagnostics (don't let a failed/non-zero gc crash the app — log and move on).
 - [ ] Verify this is the **only** place in the codebase that spawns `git.exe` — grep the finished implementation for any other shell-outs before considering this milestone done, since the whole point of this exception was that it stays narrowly scoped.
 
-### 6.3 `App.UI.SettingsDialog`
+### 5.3 `App.UI.SettingsDialog`
 - [ ] A simple modal exposing `gcIntervalMinutes` as an editable numeric field, persisted via `SettingsStore` on save.
 - [ ] Structured so a future setting can be added as another field in the same dialog without redesigning it.
 
 ---
 
-## Milestone 7 — Hardening Pass
+## Milestone 6 — Hardening Pass — Milestones 4 and 5 deferred, so this now follows Milestone 3
 
 Ref: `SPEC.md`'s Build Order item 7, plus loose ends flagged elsewhere in `SPEC.md`.
 
 - [ ] FSW overflow fallback (3.3) — if not already fully exercised in Milestone 3, stress-test it now with a heavier synthetic workload.
 - [ ] Multi-tab stale-diff lazy recompute (3.2/3.3) — verify with 3+ tabs open simultaneously, confirm only the active tab eagerly recomputes and inactive ones correctly recompute on switch-to without noticeable lag.
 - [ ] VT edge cases discovered from real usage beyond the Milestone 1 checklist — keep a running log of anything that renders incorrectly during normal day-to-day use of the finished app, and patch the vendored VtNetCore copy as needed.
-- [ ] Per-monitor DPI-change re-measurement (1.4) — retest after all other milestones, since later UI additions (Usage tab, Notes panel, dialogs) should also be checked for DPI correctness, not just the terminal control.
+- [ ] Per-monitor DPI-change re-measurement (1.4) — retest after all other milestones, since later UI additions (Usage tab, dialogs) should also be checked for DPI correctness, not just the terminal control.
 - [ ] Preset management UI polish (2.5) — richer add/edit/delete flow if the Milestone 2 version was deliberately minimal.
-- [ ] Full end-to-end pass: fresh project open → multiple concurrent tabs → live diffing → usage tracking → notes → settings change → gc firing → clean app shutdown, with no leaked processes, no orphaned file handles, no unhandled exceptions, run once start-to-finish as a final sanity check.
+- [ ] Full end-to-end pass: fresh project open → multiple concurrent tabs → live diffing → usage tracking → settings change → gc firing → clean app shutdown, with no leaked processes, no orphaned file handles, no unhandled exceptions, run once start-to-finish as a final sanity check.
 
 ---
 

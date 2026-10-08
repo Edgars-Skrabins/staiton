@@ -15,7 +15,7 @@ A lightweight Windows desktop app that wraps Claude Code CLI sessions: each tab 
 | Rendering | Custom WinForms `Control`, GDI+, double-buffered, glyph-cache, dirty-row repaint, per-monitor DPI aware |
 | Git plumbing | LibGit2Sharp for all diffing — no `git.exe` shell-out, no `git stash` API (that API mutates the working tree and is unsafe here). One narrow, deliberate exception: periodic `git gc --auto` for repo maintenance (see "Repository Maintenance" below) — not part of the diffing pipeline, so it doesn't reintroduce the risk the no-shell-out rule protects against |
 | File watching | Single project-wide `FileSystemWatcher`, debounced, `.gitignore`-aware filtering |
-| Data storage | JSON (`System.Text.Json`) for presets and settings; plain `.md` files for notes |
+| Data storage | JSON (`System.Text.Json`) for presets and settings |
 | Usage log parsing | Tailing read over `~/.claude/projects/<sanitized-cwd>/*.jsonl` (Claude Code's own local session transcripts) |
 
 **Rejected alternatives (with reasons, so they aren't re-litigated):**
@@ -39,8 +39,6 @@ A lightweight Windows desktop app that wraps Claude Code CLI sessions: each tab 
 <project-root>/.sain/
   presets.json
   settings.json
-  notes/
-    *.md
 ```
 - Created on first project open if missing.
 - The app ensures `.sain/` is listed in the project's root `.gitignore` (appending an entry if absent) — this is the one git-adjacent mutation in the whole app, and it only ever touches `.gitignore` text, never actual git state (refs/index/stash).
@@ -119,7 +117,7 @@ Per-tab, at tab-open time, snapshot the repo's full current state (tracked chang
 
 **Read-failure handling during baseline build:** between `RetrieveStatus()` (step 1) and the `Add`/`Remove` loop (steps 3–4), a file can be deleted, locked, or mid-write by a concurrently-running Claude session. This is exactly why step 3 reads each file *eagerly* via `ObjectDatabase.CreateBlob(path)` inside its own try/catch rather than relying on `TreeDefinition.Add(path, filePath, mode)`'s lazy, deferred file read (that overload only registers a builder delegate that reads the file later, inside the single `CreateTree` call — by which point a failure can no longer be isolated to one path without failing the entire baseline). On any read failure for a given path: skip that path for this baseline (log a warning, don't crash), and let it resolve naturally — it'll show up as changed/added/removed on the next live re-diff once the write settles.
 
-## Repository Maintenance (git gc)
+## Repository Maintenance (git gc) — DEFERRED (deprioritized by user; design kept for later)
 
 Every tab-open writes a dangling tree (and optionally a debug commit) that nothing ever references — by design, so it's safe and inert, but it also means nothing ever cleans these objects up either. Git's own automatic gc only triggers when `git.exe` itself runs a command (commit, checkout, fetch, etc.); since this app talks to the repo purely through the LibGit2Sharp library, our own object-writing never trips that trigger.
 
@@ -142,7 +140,7 @@ Every tab-open writes a dangling tree (and optionally a debug commit) that nothi
 - Debounce with a single coalescing timer (~150–250ms); one fan-out event to all open tabs (they all watch the same directory).
 - Only eagerly re-diff/re-render the **active** tab on each coalesced change; mark other open tabs' baselines "stale" and lazily recompute on switch-to.
 
-## Usage Tab
+## Usage Tab — DEFERRED (deprioritized by user; design kept for later)
 
 - Source: `~/.claude/projects/<sanitized-cwd>/*.jsonl`, where `sanitized-cwd` = project root path with separators replaced by `-` (e.g. `D:\GameDevelopment` → `D--GameDevelopment`). Confirmed directly against a real log file on this machine.
 - Confirmed per-line schema for `"type":"assistant"` entries: top-level `sessionId`, `cwd`, `timestamp` (ISO 8601), `gitBranch`; nested `message.model` (e.g. `"claude-sonnet-5"`) and `message.usage = { input_tokens, cache_creation_input_tokens, cache_read_input_tokens, output_tokens, output_tokens_details.thinking_tokens }`.
@@ -154,11 +152,6 @@ Every tab-open writes a dangling tree (and optionally a debug commit) that nothi
   3. The app never claims to know the actual account plan quota — both numbers above are locally-derived estimates only.
   4. The per-model context-size table lives in one small, easily-updatable static map (`ModelContextSizeTable`), since it will need updates as new models ship.
 
-## Notes / Spec Panel
-
-- Backed by `.sain/notes/*.md` — flat list, enumerated on demand (`Directory.EnumerateFiles`), no separate index file.
-- Simple file list + markdown editor UI; create/rename/delete/edit.
-
 ## Module / Class Breakdown
 
 ```
@@ -166,7 +159,6 @@ App.Core
   ProjectContext          - open project root, validates git repo (LibGit2Sharp Repository.IsValid), owns one Repository instance per tab
   PresetStore             - load/save presets.json, seeds built-in "Claude Code" preset
   SettingsStore           - load/save .sain/settings.json (gcIntervalMinutes, future settings)
-  NotesStore              - enumerate/read/write notes/*.md
   GitignoreManager        - ensures .sain/ entry exists in root .gitignore
 
 App.Pty
@@ -190,11 +182,10 @@ App.Usage
   ModelContextSizeTable   - static lookup, flagged for maintenance
 
 App.UI (WinForms)
-  MainForm                - tab strip (session tabs + Usage tab + Notes panel), right-hand diff panel host
+  MainForm                - tab strip (session tabs + Usage tab), right-hand diff panel host
   SessionTabControl       - one per open Claude session: hosts TerminalRenderControl + binds to its TabDiffEngine
   DiffPanelControl        - file list + per-file diff viewer for the active tab
   UsageTabControl
-  NotesPanelControl
   PresetPickerDialog      - choose/create preset when opening a new tab
   SettingsDialog          - edit gcIntervalMinutes and future app settings
 ```
@@ -205,9 +196,8 @@ App.UI (WinForms)
 2. **Project / preset / tab shell**: `ProjectContext` git-repo validation + blocking message, `.sain/` creation + `.gitignore` entry, `presets.json` CRUD, tab strip opening real `PtySession`s via the proof-of-concept terminal control, tab auto-close on process exit.
 3. **Diff engine**: `BaselineBuilder` + `TabDiffEngine` (one `Repository` per tab), wired to `ProjectFileWatcherService`, right-hand diff panel UI, switching active tab switches visible baseline.
 4. **Usage tab**: transcript tailing, aggregation, context-gauge + rolling-window display.
-5. **Notes panel**: file list + simple markdown editor over `.sain/notes/`.
-6. **Repository maintenance**: `SettingsStore` (`.sain/settings.json`), `GcScheduler` timer + in-flight gate, `SettingsDialog` UI for the gc interval.
-7. **Hardening pass**: FSW overflow fallback, multi-tab stale-diff lazy recompute, VT edge cases discovered from real usage (bracketed paste, IME, mouse wheel), per-monitor DPI-change re-measurement, preset management UI polish.
+5. **Repository maintenance**: `SettingsStore` (`.sain/settings.json`), `GcScheduler` timer + in-flight gate, `SettingsDialog` UI for the gc interval.
+6. **Hardening pass**: FSW overflow fallback, multi-tab stale-diff lazy recompute, VT edge cases discovered from real usage (bracketed paste, IME, mouse wheel), per-monitor DPI-change re-measurement, preset management UI polish.
 
 ## Verification
 
