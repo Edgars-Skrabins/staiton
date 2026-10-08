@@ -9,16 +9,14 @@ public sealed class TerminalGridSnapshot
     private readonly object _gate = new();
     private readonly VirtualTerminalController _controller;
     private readonly DataConsumer _consumer;
+    private bool _hasPendingChanges;
 
     public event EventHandler<byte[]>? SendData;
 
     public TerminalGridSnapshot(int rows, int cols)
     {
-        _controller = new VirtualTerminalController
-        {
-            VisibleRows = rows,
-            VisibleColumns = cols,
-        };
+        _controller = new VirtualTerminalController();
+        _controller.ResizeView(cols, rows);
         _controller.SendData += (_, e) => SendData?.Invoke(this, e.Data);
         _consumer = new DataConsumer(_controller);
     }
@@ -28,6 +26,8 @@ public sealed class TerminalGridSnapshot
         lock (_gate)
         {
             _consumer.Push(data.ToArray());
+            if (_controller.Changed)
+                _hasPendingChanges = true;
         }
     }
 
@@ -35,8 +35,7 @@ public sealed class TerminalGridSnapshot
     {
         lock (_gate)
         {
-            _controller.VisibleRows = rows;
-            _controller.VisibleColumns = cols;
+            _controller.ResizeView(cols, rows);
         }
     }
 
@@ -44,7 +43,7 @@ public sealed class TerminalGridSnapshot
     {
         lock (_gate)
         {
-            if (!_controller.Changed)
+            if (!_hasPendingChanges)
             {
                 rows = Array.Empty<LayoutRow>();
                 cursor = _controller.CursorState.Clone();
@@ -54,6 +53,7 @@ public sealed class TerminalGridSnapshot
             rows = _controller.GetPageSpans(_controller.ViewPort.TopRow, _controller.VisibleRows);
             cursor = _controller.CursorState.Clone();
             _controller.ClearChanges();
+            _hasPendingChanges = false;
             return true;
         }
     }
