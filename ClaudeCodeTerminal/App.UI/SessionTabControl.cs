@@ -8,7 +8,8 @@ namespace ClaudeCodeTerminal.App.UI;
 public sealed class SessionTabControl : UserControl
 {
     private readonly SplitContainer _outerSplit;
-    private bool _splittersInitialized;
+    private bool _userMovedSplitter;
+    private bool _settingSplitterProgrammatically;
 
     public TerminalRenderControl Terminal { get; }
     public DiffPanelControl DiffPanel { get; }
@@ -37,21 +38,27 @@ public sealed class SessionTabControl : UserControl
         };
         Theme.StyleSplitContainer(_outerSplit);
         _outerSplit.Panel1.Controls.Add(Terminal);
+        _outerSplit.Panel1.Controls.Add(Theme.CreateSectionHeader("Agent"));
         _outerSplit.Panel2.Controls.Add(DiffPanel);
+        _outerSplit.SplitterMoved += (_, _) =>
+        {
+            if (!_settingSplitterProgrammatically)
+                _userMovedSplitter = true;
+        };
+        _outerSplit.Resize += OnOuterSplitResize;
 
         Controls.Add(_outerSplit);
-
-        Layout += OnFirstLayout;
     }
 
-    private void OnFirstLayout(object? sender, LayoutEventArgs e)
+    private void OnOuterSplitResize(object? sender, EventArgs e)
     {
-        if (_splittersInitialized || Width < 300)
+        if (_userMovedSplitter || _outerSplit.Width < 300)
             return;
 
-        var target = (int)(Width * 0.42);
-        _outerSplit.SplitterDistance = Math.Clamp(target, 100, Math.Max(100, Width - 100));
-        _splittersInitialized = true;
+        var target = (int)(_outerSplit.Width * 0.42);
+        _settingSplitterProgrammatically = true;
+        _outerSplit.SplitterDistance = Math.Clamp(target, 100, Math.Max(100, _outerSplit.Width - 100));
+        _settingSplitterProgrammatically = false;
     }
 
     public async Task StartAsync(Preset preset, ProjectContext project)

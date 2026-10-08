@@ -72,6 +72,9 @@ public static class Theme
     private static Font? _uiFont;
     public static Font UiFont => _uiFont ??= CreateUiFont();
 
+    private static Font? _uiFontBold;
+    public static Font UiFontBold => _uiFontBold ??= new Font(UiFont, FontStyle.Bold);
+
     private static Font CreateUiFont()
     {
         foreach (var family in new[] { "Segoe UI Variable Text", "Segoe UI" })
@@ -136,6 +139,30 @@ public static class Theme
         split.BackColor = Border;
         split.Panel1.BackColor = Background;
         split.Panel2.BackColor = Background;
+    }
+
+    public static Panel CreateSectionHeader(string title)
+    {
+        var panel = new Panel
+        {
+            Dock = DockStyle.Top,
+            Height = 30,
+            BackColor = PanelBackground,
+        };
+
+        var label = new Label
+        {
+            Text = title,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Padding = new Padding(12, 0, 0, 0),
+            ForeColor = SubtleText,
+            Font = UiFontBold,
+            AutoEllipsis = true,
+        };
+
+        panel.Controls.Add(label);
+        return panel;
     }
 
     public static void StyleMenuStrip(MenuStrip menuStrip)

@@ -9,7 +9,8 @@ public sealed class DiffPanelControl : UserControl
     private readonly RichTextBox _diffView;
     private readonly Font _diffFont;
     private IReadOnlyList<FileChange> _changes = [];
-    private bool _splitterInitialized;
+    private bool _userMovedSplitter;
+    private bool _settingSplitterProgrammatically;
 
     public DiffPanelControl()
     {
@@ -22,7 +23,12 @@ public sealed class DiffPanelControl : UserControl
             SplitterWidth = 1,
         };
         Theme.StyleSplitContainer(_split);
-        Layout += OnFirstLayout;
+        _split.SplitterMoved += (_, _) =>
+        {
+            if (!_settingSplitterProgrammatically)
+                _userMovedSplitter = true;
+        };
+        _split.Resize += OnSplitResize;
 
         _fileList = new ListBox
         {
@@ -53,7 +59,9 @@ public sealed class DiffPanelControl : UserControl
         Theme.ApplyDarkScrollBar(_diffView);
 
         _split.Panel1.Controls.Add(_fileList);
+        _split.Panel1.Controls.Add(Theme.CreateSectionHeader("File changes"));
         _split.Panel2.Controls.Add(_diffView);
+        _split.Panel2.Controls.Add(Theme.CreateSectionHeader("Git Diff"));
 
         Controls.Add(_split);
     }
@@ -69,13 +77,14 @@ public sealed class DiffPanelControl : UserControl
         return new Font(FontFamily.GenericMonospace, 9f, FontStyle.Regular, GraphicsUnit.Point);
     }
 
-    private void OnFirstLayout(object? sender, LayoutEventArgs e)
+    private void OnSplitResize(object? sender, EventArgs e)
     {
-        if (_splitterInitialized || Width < 300)
+        if (_userMovedSplitter || _split.Width < 300)
             return;
 
-        _split.SplitterDistance = Math.Clamp(220, 100, Math.Max(100, Width - 100));
-        _splitterInitialized = true;
+        _settingSplitterProgrammatically = true;
+        _split.SplitterDistance = Math.Clamp(220, 100, Math.Max(100, _split.Width - 100));
+        _settingSplitterProgrammatically = false;
     }
 
     public void ShowChanges(IReadOnlyList<FileChange> changes)
@@ -133,7 +142,13 @@ public sealed class DiffPanelControl : UserControl
 
         using var textBrush = new SolidBrush(Theme.Text);
         var textBounds = new Rectangle(e.Bounds.X + 26, e.Bounds.Y, e.Bounds.Width - 26, e.Bounds.Height);
-        e.Graphics.DrawString(change.Path, e.Font ?? Font, textBrush, textBounds, new StringFormat { LineAlignment = StringAlignment.Center, Trimming = StringTrimming.EllipsisPath });
+        var pathFormat = new StringFormat
+        {
+            LineAlignment = StringAlignment.Center,
+            Trimming = StringTrimming.EllipsisPath,
+            FormatFlags = StringFormatFlags.NoWrap,
+        };
+        e.Graphics.DrawString(change.Path, e.Font ?? Font, textBrush, textBounds, pathFormat);
     }
 
     private void ShowSelectedDiff()
